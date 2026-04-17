@@ -4,10 +4,21 @@ import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Toast from 'react-native-toast-message';
 
+import { ThemeProvider, useTheme } from '@/lib/ThemeContext';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <RootShell />
+    </ThemeProvider>
+  );
+}
+
+function RootShell() {
+  const { theme } = useTheme();
+  const { colors } = theme;
   const [bootstrapped, setBootstrapped] = useState(false);
   const setCurrentUser = useAuthStore((s) => s.setCurrentUser);
   const currentUser = useAuthStore((s) => s.currentUser);
@@ -60,15 +71,29 @@ export default function RootLayout() {
 
   if (!bootstrapped) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator />
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: colors.bg,
+        }}
+      >
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.bgElevated },
+          headerTintColor: colors.text,
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: colors.bg },
+        }}
+      >
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="book/new" options={{ title: 'Nowa książka', presentation: 'modal' }} />

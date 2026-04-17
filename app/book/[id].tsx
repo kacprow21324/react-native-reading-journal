@@ -1,21 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 
+import { PressableScale } from '@/components/PressableScale';
 import { StarRating } from '@/components/StarRating';
+import { ThemedButton } from '@/components/ThemedButton';
 import { normalize } from '@/lib/normalize';
 import { STATUS_LABELS } from '@/lib/status';
+import { useTheme } from '@/lib/ThemeContext';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { Book } from '@/types/db';
@@ -46,9 +42,12 @@ function readUsername(profiles: ReaderRow['profiles']): string {
 export default function BookDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const currentUser = useAuthStore((s) => s.currentUser);
+  const { theme } = useTheme();
+  const { colors, spacing, radius, typography } = theme;
   const [book, setBook] = useState<Book | null>(null);
   const [readers, setReaders] = useState<Reader[]>([]);
   const [loading, setLoading] = useState(true);
+  const [followBusy, setFollowBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id || !currentUser) return;
@@ -111,10 +110,12 @@ export default function BookDetails() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function follow(userId: string) {
-    if (!currentUser) return;
+    if (!currentUser || followBusy) return;
+    setFollowBusy(userId);
     const { error } = await supabase
       .from('user_follows')
       .insert({ follower_id: currentUser.id, following_id: userId });
+    setFollowBusy(null);
     if (error) {
       Toast.show({
         type: 'error',
@@ -130,73 +131,146 @@ export default function BookDetails() {
   }
 
   function confirmDelete() {
+    const runDelete = async () => {
+      if (!book) return;
+      const { error } = await supabase.from('books').delete().eq('id', book.id);
+      if (error) {
+        Toast.show({ type: 'error', text1: 'Błąd', text2: error.message });
+        return;
+      }
+      Toast.show({ type: 'success', text1: 'Usunięto' });
+      router.back();
+    };
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Usunąć książkę? Tej operacji nie można cofnąć.')) {
+        runDelete();
+      }
+      return;
+    }
     Alert.alert('Usunąć książkę?', 'Tej operacji nie można cofnąć.', [
       { text: 'Anuluj', style: 'cancel' },
-      {
-        text: 'Usuń',
-        style: 'destructive',
-        onPress: async () => {
-          if (!book) return;
-          const { error } = await supabase.from('books').delete().eq('id', book.id);
-          if (error) {
-            Toast.show({ type: 'error', text1: 'Błąd', text2: error.message });
-            return;
-          }
-          Toast.show({ type: 'success', text1: 'Usunięto' });
-          router.back();
-        },
-      },
+      { text: 'Usuń', style: 'destructive', onPress: runDelete },
     ]);
   }
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        screen: { flex: 1, backgroundColor: colors.bg },
+        content: { padding: spacing.lg, gap: spacing.md },
+        card: {
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: spacing.lg,
+        },
+        header: { flexDirection: 'row', gap: spacing.lg, alignItems: 'flex-start' },
+        cover: { width: 104, height: 156, borderRadius: radius.md, backgroundColor: colors.surfaceMuted },
+        title: { ...typography.h2, color: colors.text },
+        author: { ...typography.body, color: colors.textMuted, marginTop: 2 },
+        statusBadge: {
+          alignSelf: 'flex-start',
+          marginTop: spacing.sm,
+          backgroundColor: colors.primaryMuted,
+          paddingHorizontal: spacing.md,
+          paddingVertical: 4,
+          borderRadius: radius.pill,
+        },
+        statusText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+        sectionTitle: { ...typography.h3, color: colors.text, marginTop: spacing.md },
+        notes: { marginTop: spacing.sm, color: colors.textMuted, lineHeight: 20 },
+        actions: { flexDirection: 'row', gap: spacing.sm },
+        readerRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: spacing.md,
+          gap: spacing.md,
+        },
+        readerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+        avatar: {
+          width: 40,
+          height: 40,
+          borderRadius: radius.pill,
+          backgroundColor: colors.primaryMuted,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        readerName: { ...typography.bodyStrong, color: colors.text },
+        readerMeta: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+        followBtn: {
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          backgroundColor: colors.primary,
+          borderRadius: radius.md,
+          minWidth: 96,
+          alignItems: 'center',
+        },
+        followBtnDone: { backgroundColor: colors.surfaceMuted },
+        followBtnText: { color: colors.primaryText, fontSize: 12, fontWeight: '700' },
+        empty: { color: colors.textMuted, marginTop: spacing.sm },
+      }),
+    [colors, spacing, radius, typography],
+  );
+
   if (loading || !book) {
-    return <ActivityIndicator style={{ marginTop: 24 }} />;
+    return (
+      <View style={[styles.screen, { justifyContent: 'center' }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.wrap}>
-      <View style={styles.header}>
-        {book.cover_url ? (
-          <Image
-            source={{ uri: book.cover_url }}
-            style={styles.cover}
-            contentFit="cover"
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Animated.View entering={FadeInUp.duration(260)} style={styles.card}>
+        <View style={styles.header}>
+          {book.cover_url ? (
+            <Image source={{ uri: book.cover_url }} style={styles.cover} contentFit="cover" />
+          ) : (
+            <View style={styles.cover} />
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{book.title}</Text>
+            <Text style={styles.author}>{book.author}</Text>
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>{STATUS_LABELS[book.status]}</Text>
+            </View>
+            {book.status === 'finished' && book.rating ? (
+              <View style={{ marginTop: spacing.sm }}>
+                <StarRating value={book.rating} size={18} disabled />
+              </View>
+            ) : null}
+          </View>
+        </View>
+        {book.notes ? (
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={styles.sectionTitle}>Notatki</Text>
+            <Text style={styles.notes}>{book.notes}</Text>
+          </View>
+        ) : null}
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.actions}>
+        <Link href={{ pathname: '/book/new', params: { id: book.id } }} asChild>
+          <ThemedButton
+            label="Edytuj"
+            variant="secondary"
+            icon={<Ionicons name="create-outline" size={18} color={colors.primary} />}
           />
-        ) : (
-          <View style={[styles.cover, { backgroundColor: '#eee' }]} />
-        )}
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.title}>{book.title}</Text>
-          <Text style={styles.author}>{book.author}</Text>
-          <Text style={styles.status}>{STATUS_LABELS[book.status]}</Text>
-          {book.status === 'finished' && book.rating ? (
-            <StarRating value={book.rating} size={18} disabled />
-          ) : null}
-        </View>
-      </View>
-
-      {book.notes ? (
-        <View style={styles.notesBox}>
-          <Text style={styles.sectionTitle}>Notatki</Text>
-          <Text style={styles.notes}>{book.notes}</Text>
-        </View>
-      ) : null}
-
-      <View style={styles.actions}>
-        <Link
-          href={{ pathname: '/book/new', params: { id: book.id } }}
-          asChild
-        >
-          <Pressable style={styles.action}>
-            <Ionicons name="create-outline" size={18} color="#3B6EEA" />
-            <Text style={styles.actionText}>Edytuj</Text>
-          </Pressable>
         </Link>
-        <Pressable style={[styles.action, styles.delete]} onPress={confirmDelete}>
-          <Ionicons name="trash-outline" size={18} color="#c33" />
-          <Text style={[styles.actionText, { color: '#c33' }]}>Usuń</Text>
-        </Pressable>
-      </View>
+        <ThemedButton
+          label="Usuń"
+          variant="danger"
+          onPress={confirmDelete}
+          icon={<Ionicons name="trash-outline" size={18} color={colors.danger} />}
+        />
+      </Animated.View>
 
       <Text style={styles.sectionTitle}>
         {readers.length}{' '}
@@ -204,38 +278,54 @@ export default function BookDetails() {
           ? 'osoba przeczytała tę książkę'
           : 'osób przeczytało tę książkę'}
       </Text>
-      {readers.map((r) => (
-        <View key={r.id} style={styles.readerRow}>
-          <Pressable
+      {readers.map((r, idx) => (
+        <Animated.View
+          key={r.id}
+          entering={FadeInDown.delay(idx * 30).duration(220)}
+          style={styles.readerRow}
+        >
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={`Otwórz bibliotekę: ${r.username}`}
             style={styles.readerInfo}
+            scaleTo={0.98}
             onPress={() =>
               router.push({ pathname: '/user/[id]', params: { id: r.user_id } })
             }
           >
-            <Ionicons name="person-circle" size={32} color="#3B6EEA" />
+            <View style={styles.avatar}>
+              <Ionicons name="person" size={20} color={colors.primary} />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.readerName}>{r.username}</Text>
+              <Text style={styles.readerName} numberOfLines={1}>{r.username}</Text>
               <Text style={styles.readerMeta}>
                 Ocena: {r.rating ?? '—'} ·{' '}
                 {new Date(r.date_added).toLocaleDateString('pl-PL')}
               </Text>
             </View>
-          </Pressable>
-          <Pressable
-            disabled={r.isFollowed}
+          </PressableScale>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={r.isFollowed ? 'Obserwujesz' : `Obserwuj ${r.username}`}
+            disabled={r.isFollowed || followBusy === r.user_id}
             onPress={() => follow(r.user_id)}
             style={[styles.followBtn, r.isFollowed && styles.followBtnDone]}
+            scaleTo={0.95}
           >
-            <Text
-              style={[
-                styles.followBtnText,
-                r.isFollowed && { color: '#888' },
-              ]}
-            >
-              {r.isFollowed ? 'Obserwujesz' : 'Obserwuj'}
-            </Text>
-          </Pressable>
-        </View>
+            {followBusy === r.user_id ? (
+              <ActivityIndicator size="small" color={colors.primaryText} />
+            ) : (
+              <Text
+                style={[
+                  styles.followBtnText,
+                  r.isFollowed && { color: colors.textMuted },
+                ]}
+              >
+                {r.isFollowed ? 'Obserwujesz' : 'Obserwuj'}
+              </Text>
+            )}
+          </PressableScale>
+        </Animated.View>
       ))}
       {readers.length === 0 && (
         <Text style={styles.empty}>Nikt inny jeszcze nie przeczytał tej książki.</Text>
@@ -243,47 +333,3 @@ export default function BookDetails() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { padding: 16, gap: 12, backgroundColor: '#F3F4F6' },
-  header: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
-  cover: { width: 100, height: 150, borderRadius: 6 },
-  title: { fontSize: 20, fontWeight: '700' },
-  author: { fontSize: 15, color: '#555' },
-  status: { fontSize: 13, color: '#357', marginTop: 4 },
-  notesBox: { backgroundColor: '#fff', padding: 12, borderRadius: 8 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', marginTop: 6 },
-  notes: { marginTop: 6, color: '#333' },
-  actions: { flexDirection: 'row', gap: 10 },
-  action: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#eef',
-    borderRadius: 8,
-  },
-  delete: { backgroundColor: '#fee' },
-  actionText: { color: '#3B6EEA', fontWeight: '600' },
-  readerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 8,
-    gap: 8,
-  },
-  readerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  readerName: { fontWeight: '600' },
-  readerMeta: { fontSize: 12, color: '#666' },
-  followBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#3B6EEA',
-    borderRadius: 6,
-  },
-  followBtnDone: { backgroundColor: '#eee' },
-  followBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  empty: { color: '#888', marginTop: 8 },
-});

@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { useTheme } from '@/lib/ThemeContext';
 import { STATUS_LABELS, type BookStatus } from '@/lib/status';
+import { PressableScale } from './PressableScale';
 import { StarRating } from './StarRating';
 
 type Props = {
@@ -16,46 +18,98 @@ type Props = {
 };
 
 export function BookRow({ title, author, coverUrl, status, rating, rightSlot, onPress }: Props) {
-  return (
-    <Pressable style={styles.row} onPress={onPress}>
+  const { theme } = useTheme();
+  const { colors, spacing, radius, typography } = theme;
+  const isPressable = typeof onPress === 'function';
+
+  const content = (
+    <>
       {coverUrl ? (
-        <Image source={{ uri: coverUrl }} style={styles.cover} contentFit="cover" />
+        <Image
+          source={{ uri: coverUrl }}
+          style={[
+            styles.cover,
+            { backgroundColor: colors.surfaceMuted, borderRadius: radius.sm },
+          ]}
+          contentFit="cover"
+        />
       ) : (
-        <View style={[styles.cover, styles.coverFallback]}>
-          <Text style={styles.coverFallbackText}>{title.slice(0, 1).toUpperCase()}</Text>
+        <View
+          style={[
+            styles.cover,
+            styles.coverFallback,
+            { backgroundColor: colors.surfaceMuted, borderRadius: radius.sm },
+          ]}
+        >
+          <Text style={[styles.coverFallbackText, { color: colors.textSubtle }]}>
+            {title.slice(0, 1).toUpperCase()}
+          </Text>
         </View>
       )}
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>{title}</Text>
-        <Text style={styles.author} numberOfLines={1}>{author}</Text>
-        {status && <Text style={styles.status}>{STATUS_LABELS[status]}</Text>}
+        <Text style={[typography.bodyStrong, { color: colors.text }]} numberOfLines={2}>
+          {title}
+        </Text>
+        <Text
+          style={[typography.small, { color: colors.textMuted, marginTop: 2 }]}
+          numberOfLines={1}
+        >
+          {author}
+        </Text>
+        {status && (
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.primary, marginTop: spacing.xs },
+            ]}
+          >
+            {STATUS_LABELS[status]}
+          </Text>
+        )}
         {typeof rating === 'number' && rating > 0 && (
-          <View style={{ marginTop: 4 }}>
+          <View style={{ marginTop: spacing.xs }}>
             <StarRating value={rating} size={14} disabled />
           </View>
         )}
       </View>
       {rightSlot}
-    </Pressable>
+    </>
+  );
+
+  const sharedStyle = [
+    styles.row,
+    {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      marginHorizontal: spacing.lg,
+      marginVertical: spacing.xs,
+      padding: spacing.md,
+      gap: spacing.md,
+    },
+  ];
+
+  if (!isPressable) {
+    return <View style={sharedStyle}>{content}</View>;
+  }
+
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${author}`}
+      onPress={onPress}
+      scaleTo={0.985}
+      style={sharedStyle}
+    >
+      {content}
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    padding: 12,
-    gap: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    alignItems: 'center',
-  },
-  cover: { width: 56, height: 80, borderRadius: 4, backgroundColor: '#eee' },
+  row: { flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
+  cover: { width: 58, height: 84 },
   coverFallback: { justifyContent: 'center', alignItems: 'center' },
-  coverFallbackText: { fontSize: 28, fontWeight: '600', color: '#888' },
+  coverFallbackText: { fontSize: 28, fontWeight: '700' },
   body: { flex: 1 },
-  title: { fontSize: 15, fontWeight: '600' },
-  author: { fontSize: 13, color: '#555', marginTop: 2 },
-  status: { fontSize: 12, color: '#357', marginTop: 4 },
 });

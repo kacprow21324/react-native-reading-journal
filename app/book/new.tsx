@@ -1,17 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 
 import { StarRating } from '@/components/StarRating';
 import { StatusPicker } from '@/components/StatusPicker';
+import { ThemedButton } from '@/components/ThemedButton';
+import { normalize } from '@/lib/normalize';
+import { useTheme } from '@/lib/ThemeContext';
 import type { BookStatus } from '@/lib/status';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -21,6 +18,8 @@ export default function AddOrEditBook() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const editing = Boolean(id);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const { theme } = useTheme();
+  const { colors, spacing, radius, typography } = theme;
 
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -55,12 +54,32 @@ export default function AddOrEditBook() {
   }, [editing, id]);
 
   async function save() {
-    if (!currentUser) return;
+    if (!currentUser || saving) return;
     if (!title.trim() || !author.trim()) {
       Toast.show({ type: 'error', text1: 'Tytuł i autor są wymagane' });
       return;
     }
     setSaving(true);
+
+    // Ręczne sprawdzenie duplikatów również tutaj, żeby lepiej niż surowe 23505.
+    if (!editing) {
+      const { data: dup } = await supabase
+        .from('books')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .eq('title_normalized', normalize(title))
+        .eq('author_normalized', normalize(author))
+        .maybeSingle();
+      if (dup) {
+        setSaving(false);
+        Toast.show({
+          type: 'info',
+          text1: 'Masz już tę książkę na liście',
+        });
+        return;
+      }
+    }
+
     const payload = {
       user_id: currentUser.id,
       title: title.trim(),
@@ -76,6 +95,11 @@ export default function AddOrEditBook() {
         : await supabase.from('books').insert(payload);
     setSaving(false);
     if (error) {
+      const code = (error as { code?: string }).code;
+      if (code === '23505') {
+        Toast.show({ type: 'info', text1: 'Taka książka już istnieje na Twojej liście' });
+        return;
+      }
       Toast.show({
         type: 'error',
         text1: 'Zapis nie powiódł się',
@@ -90,79 +114,110 @@ export default function AddOrEditBook() {
     router.back();
   }
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        screen: { flex: 1, backgroundColor: colors.bg },
+        content: { padding: spacing.lg, gap: spacing.sm },
+        card: {
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: spacing.lg,
+          gap: spacing.sm,
+        },
+        label: {
+          ...typography.caption,
+          color: colors.textMuted,
+          marginTop: spacing.sm,
+          fontWeight: '700',
+        },
+        input: {
+          backgroundColor: colors.bgElevated,
+          borderRadius: radius.md,
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.md,
+          fontSize: 15,
+          color: colors.text,
+          borderWidth: 1,
+          borderColor: colors.border,
+        },
+        notes: { minHeight: 110, textAlignVertical: 'top' },
+      }),
+    [colors, spacing, radius, typography],
+  );
+
   if (loading) {
-    return <ActivityIndicator style={{ marginTop: 24 }} />;
+    return (
+      <View style={[styles.screen, { justifyContent: 'center' }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.wrap}>
-      <Text style={styles.label}>Tytuł</Text>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} />
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Animated.View entering={FadeInDown.duration(260)} style={styles.card}>
+        <Text style={styles.label}>Tytuł</Text>
+        <TextInput
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="np. Lalka"
+          placeholderTextColor={colors.textSubtle}
+        />
 
-      <Text style={styles.label}>Autor</Text>
-      <TextInput style={styles.input} value={author} onChangeText={setAuthor} />
+        <Text style={styles.label}>Autor</Text>
+        <TextInput
+          style={styles.input}
+          value={author}
+          onChangeText={setAuthor}
+          placeholder="np. Bolesław Prus"
+          placeholderTextColor={colors.textSubtle}
+        />
 
-      <Text style={styles.label}>URL okładki (opcjonalnie)</Text>
-      <TextInput
-        style={styles.input}
-        value={coverUrl}
-        onChangeText={setCoverUrl}
-        autoCapitalize="none"
-        placeholder="https://..."
-      />
+        <Text style={styles.label}>URL okładki (opcjonalnie)</Text>
+        <TextInput
+          style={styles.input}
+          value={coverUrl}
+          onChangeText={setCoverUrl}
+          autoCapitalize="none"
+          placeholder="https://..."
+          placeholderTextColor={colors.textSubtle}
+        />
 
-      <Text style={styles.label}>Status</Text>
-      <StatusPicker value={status} onChange={setStatus} />
+        <Text style={styles.label}>Status</Text>
+        <StatusPicker value={status} onChange={setStatus} />
 
-      <Text style={styles.label}>
-        Ocena {status === 'finished' ? '' : '(dostępna dla statusu „Przeczytane")'}
-      </Text>
-      <StarRating
-        value={rating}
-        onChange={status === 'finished' ? setRating : undefined}
-        disabled={status !== 'finished'}
-      />
+        <Text style={styles.label}>
+          Ocena {status === 'finished' ? '' : '(dostępna dla statusu „Przeczytane")'}
+        </Text>
+        <StarRating
+          value={rating}
+          onChange={status === 'finished' ? setRating : undefined}
+          disabled={status !== 'finished'}
+        />
 
-      <Text style={styles.label}>Notatki</Text>
-      <TextInput
-        style={[styles.input, styles.notes]}
-        value={notes}
-        onChangeText={setNotes}
-        multiline
-      />
+        <Text style={styles.label}>Notatki</Text>
+        <TextInput
+          style={[styles.input, styles.notes]}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          placeholder="Twoje przemyślenia o książce…"
+          placeholderTextColor={colors.textSubtle}
+        />
+      </Animated.View>
 
-      <Pressable style={styles.button} onPress={save} disabled={saving}>
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>
-            {editing ? 'Zapisz zmiany' : 'Dodaj książkę'}
-          </Text>
-        )}
-      </Pressable>
+      <Animated.View entering={FadeInDown.delay(60).duration(260)}>
+        <ThemedButton
+          label={editing ? 'Zapisz zmiany' : 'Dodaj książkę'}
+          loading={saving}
+          onPress={save}
+          fullWidth
+        />
+      </Animated.View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { padding: 16, gap: 8, backgroundColor: '#F3F4F6' },
-  label: { fontSize: 13, fontWeight: '600', color: '#444', marginTop: 8 },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  notes: { minHeight: 100, textAlignVertical: 'top' },
-  button: {
-    backgroundColor: '#3B6EEA',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-});

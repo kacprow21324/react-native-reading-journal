@@ -1,10 +1,15 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { StarRating } from '@/components/StarRating';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { STATUS_LABELS, type BookStatus } from '@/lib/status';
+import { useTheme } from '@/lib/ThemeContext';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { Book } from '@/types/db';
@@ -20,6 +25,8 @@ type Stats = {
 
 export default function Statistics() {
   const currentUser = useAuthStore((s) => s.currentUser);
+  const { theme } = useTheme();
+  const { colors, spacing, radius, typography } = theme;
   const [stats, setStats] = useState<Stats | null>(null);
 
   const load = useCallback(async () => {
@@ -67,71 +74,185 @@ export default function Statistics() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        screen: { flex: 1, backgroundColor: colors.bg },
+        content: { padding: spacing.lg, gap: spacing.sm },
+        header: { marginBottom: spacing.sm },
+        overline: { ...typography.overline, color: colors.textSubtle },
+        title: { ...typography.h2, color: colors.text, marginTop: 4 },
+        statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+        statCard: {
+          flexBasis: '48%',
+          flexGrow: 1,
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: spacing.lg,
+          gap: 4,
+        },
+        statIconWrap: {
+          width: 36,
+          height: 36,
+          borderRadius: radius.pill,
+          backgroundColor: colors.primaryMuted,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: spacing.xs,
+        },
+        statLabel: { ...typography.caption, color: colors.textMuted },
+        statValue: { ...typography.h2, color: colors.text, marginTop: 2 },
+        sectionHeader: {
+          ...typography.overline,
+          color: colors.textMuted,
+          marginTop: spacing.md,
+        },
+        listCard: {
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.sm,
+        },
+        listRow: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: spacing.sm,
+        },
+        listDivider: {
+          height: 1,
+          backgroundColor: colors.divider,
+        },
+        listLabel: { ...typography.body, color: colors.text },
+        listValue: { ...typography.bodyStrong, color: colors.primary },
+        top: {
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: spacing.lg,
+          gap: spacing.sm,
+        },
+        topTitle: { ...typography.h3, color: colors.text },
+        settings: {
+          marginTop: spacing.md,
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: spacing.lg,
+          gap: spacing.md,
+        },
+      }),
+    [colors, spacing, radius, typography],
+  );
+
   if (!stats) {
-    return <ActivityIndicator style={{ marginTop: 24 }} />;
+    return (
+      <SafeAreaView style={styles.screen} edges={['top']}>
+        <View style={[styles.screen, { justifyContent: 'center' }]}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.wrap}>
-      <Card label="Wszystkie książki" value={stats.total} />
-      <Card label="Przeczytane (ogółem)" value={stats.finishedTotal} />
-      <Card label="Przeczytane w tym roku" value={stats.finishedThisYear} />
-      <Card
-        label="Średnia ocena"
-        value={stats.averageRating !== null ? stats.averageRating.toFixed(2) : '—'}
-      />
-      <Text style={styles.sectionHeader}>Według statusu</Text>
-      {(Object.keys(stats.byStatus) as BookStatus[]).map((s) => (
-        <Card key={s} label={STATUS_LABELS[s]} value={stats.byStatus[s]} />
-      ))}
-      {stats.topBook && (
-        <View style={styles.top}>
-          <Text style={styles.sectionHeader}>Najwyżej oceniona</Text>
-          <Text style={styles.topTitle}>
-            {stats.topBook.title} — {stats.topBook.author}
-          </Text>
-          <StarRating value={stats.topBook.rating} disabled />
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.overline}>Statystyki</Text>
+          <Text style={styles.title}>Twoja czytelnicza podróż</Text>
         </View>
-      )}
-    </ScrollView>
+
+        <Animated.View entering={FadeInUp.duration(240)} style={styles.statsGrid}>
+          <StatCard
+            icon="library-outline"
+            label="Wszystkie książki"
+            value={String(stats.total)}
+            styles={styles}
+            colors={colors}
+          />
+          <StatCard
+            icon="checkmark-done-outline"
+            label="Przeczytane ogółem"
+            value={String(stats.finishedTotal)}
+            styles={styles}
+            colors={colors}
+          />
+          <StatCard
+            icon="calendar-outline"
+            label="W tym roku"
+            value={String(stats.finishedThisYear)}
+            styles={styles}
+            colors={colors}
+          />
+          <StatCard
+            icon="star-outline"
+            label="Średnia ocena"
+            value={stats.averageRating !== null ? stats.averageRating.toFixed(2) : '—'}
+            styles={styles}
+            colors={colors}
+          />
+        </Animated.View>
+
+        <Text style={styles.sectionHeader}>Według statusu</Text>
+        <Animated.View entering={FadeInDown.delay(60).duration(240)} style={styles.listCard}>
+          {(Object.keys(stats.byStatus) as BookStatus[]).map((s, idx, arr) => (
+            <View key={s}>
+              <View style={styles.listRow}>
+                <Text style={styles.listLabel}>{STATUS_LABELS[s]}</Text>
+                <Text style={styles.listValue}>{stats.byStatus[s]}</Text>
+              </View>
+              {idx < arr.length - 1 ? <View style={styles.listDivider} /> : null}
+            </View>
+          ))}
+        </Animated.View>
+
+        {stats.topBook && (
+          <Animated.View entering={FadeInDown.delay(120).duration(240)} style={styles.top}>
+            <Text style={styles.sectionHeader}>Najwyżej oceniona</Text>
+            <Text style={styles.topTitle}>
+              {stats.topBook.title} — {stats.topBook.author}
+            </Text>
+            <StarRating value={stats.topBook.rating} disabled />
+          </Animated.View>
+        )}
+
+        <Animated.View entering={FadeInDown.delay(180).duration(240)} style={styles.settings}>
+          <Text style={styles.sectionHeader}>Motyw</Text>
+          <ThemeToggle />
+        </Animated.View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-function Card({ label, value }: { label: string; value: string | number }) {
+type CardProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  styles: {
+    statCard: object;
+    statIconWrap: object;
+    statLabel: object;
+    statValue: object;
+  };
+  colors: { primary: string };
+};
+
+function StatCard({ icon, label, value, styles, colors }: CardProps) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardLabel}>{label}</Text>
-      <Text style={styles.cardValue}>{value}</Text>
+    <View style={styles.statCard}>
+      <View style={styles.statIconWrap}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { padding: 16, gap: 10 },
-  card: {
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardLabel: { fontSize: 14, color: '#333' },
-  cardValue: { fontSize: 20, fontWeight: '700', color: '#3B6EEA' },
-  sectionHeader: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#555',
-    marginTop: 12,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  top: {
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 10,
-    marginTop: 6,
-    gap: 8,
-  },
-  topTitle: { fontSize: 15, fontWeight: '600' },
-});

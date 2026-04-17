@@ -1,18 +1,16 @@
 import { Link } from 'expo-router';
-import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useMemo, useState } from 'react';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 
+import { ThemedButton } from '@/components/ThemedButton';
+import { useTheme } from '@/lib/ThemeContext';
 import { supabase } from '@/services/supabase';
 
 export default function Login() {
+  const { theme } = useTheme();
+  const { colors, spacing, radius, typography } = theme;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,58 +31,83 @@ export default function Login() {
     }
   }
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        screen: {
+          flex: 1,
+          padding: spacing.xl,
+          justifyContent: 'center',
+          gap: spacing.md,
+          backgroundColor: colors.bg,
+        },
+        brand: { ...typography.overline, color: colors.primary, textAlign: 'center' },
+        title: { ...typography.h1, color: colors.text, textAlign: 'center' },
+        subtitle: {
+          ...typography.body,
+          color: colors.textMuted,
+          textAlign: 'center',
+          marginBottom: spacing.md,
+        },
+        input: {
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+          color: colors.text,
+          borderRadius: radius.md,
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.md,
+          fontSize: 15,
+        },
+        link: { color: colors.primary, textAlign: 'center', marginTop: spacing.md, fontWeight: '600' },
+      }),
+    [colors, spacing, radius, typography],
+  );
+
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Dziennik Czytelnika</Text>
-      <Text style={styles.subtitle}>Zaloguj się</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Hasło"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-      <Pressable style={styles.button} onPress={signIn} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Zaloguj</Text>
-        )}
-      </Pressable>
+    <View style={styles.screen}>
+      <Animated.Text entering={FadeInUp.duration(260)} style={styles.brand}>
+        Dziennik Czytelnika
+      </Animated.Text>
+      <Animated.Text entering={FadeInUp.delay(60).duration(260)} style={styles.title}>
+        Witaj z powrotem
+      </Animated.Text>
+      <Animated.Text entering={FadeInUp.delay(120).duration(260)} style={styles.subtitle}>
+        Zaloguj się, aby wrócić do swojej biblioteki.
+      </Animated.Text>
+      <Animated.View entering={FadeInDown.delay(160).duration(260)}>
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={colors.textSubtle}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+      </Animated.View>
+      <Animated.View entering={FadeInDown.delay(200).duration(260)}>
+        <TextInput
+          style={styles.input}
+          placeholder="Hasło"
+          placeholderTextColor={colors.textSubtle}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
+      </Animated.View>
+      <Animated.View entering={FadeInDown.delay(240).duration(260)}>
+        <ThemedButton
+          label="Zaloguj"
+          onPress={signIn}
+          loading={loading}
+          fullWidth
+          accessibilityLabel="Zaloguj się"
+        />
+      </Animated.View>
       <Link href="/register" style={styles.link}>
         Nie masz konta? Zarejestruj się
       </Link>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: 24, justifyContent: 'center', gap: 12, backgroundColor: '#fff' },
-  title: { fontSize: 28, fontWeight: '800', textAlign: 'center' },
-  subtitle: { fontSize: 16, color: '#555', textAlign: 'center', marginBottom: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  button: {
-    backgroundColor: '#3B6EEA',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { color: '#3B6EEA', textAlign: 'center', marginTop: 8 },
-});
